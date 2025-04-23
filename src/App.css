@@ -1,0 +1,108 @@
+/* Estilos generales */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 1rem;
+  gap: 1rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+h1 {
+  margin: 0;
+  color: #2c3e50;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+/* Panel de información */
+.info-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+  background: #ecf0f1;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.weather-info {
+  flex: 1;
+  min-width: 250px;
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.controls {
+  flex: 1;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Controles */
+.province-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.province-select select {
+  padding: 0.5rem;
+  border: 1px solid #bdc3c7;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.search-button {
+  padding: 0.75rem;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s;
+}
+
+.search-button:hover {
+  background: #2ecc71;
+}
+
+.search-button:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+}
+
+/* Mapa */
+.map-container {
+  flex: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+/* Popups */
+.gym-popup, .hiking-popup {
+  min-width: 200px;
+}
+
+.gym-popup h3, .hiking-popup h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .info-panel {
+    flex-direction: column;
+  }
+  
+  .weather-info, .controls {
+    width: 100%;
+  }
+}
