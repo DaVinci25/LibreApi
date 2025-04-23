@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import './App.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { fallbackProvinces, Province } from './data/provinces';
 
 // Configuración de iconos
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -24,25 +25,49 @@ const UserIcon = L.icon({
   iconAnchor: [12, 41]
 });
 
-// Tipos de datos
+// Añadir nuevo icono para parques nacionales
+const ParkIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+
+// Tipos de datos simplificados
 interface Gym {
   id: number;
   lat: number;
   lon: number;
   tags: {
     name: string;
-    website?: string;
   };
 }
 
-interface Province {
-  codigo: string;
-  nombre: string;
-  capital: string;
-  poblacion: number;
-  superficie: number;
-  comunidad: string;
-  bounds: [[number, number], [number, number]];
+interface NationalPark {
+  id: number;
+  lat: number;
+  lon: number;
+  tags: {
+    name: string;
+  };
+}
+
+interface Location {
+  id: number;
+  lat: number;
+  lon: number;
+  tags: {
+    name: string;
+    description?: string;
+    website?: string;
+    opening_hours?: string;
+    phone?: string;
+  };
+  osmDetails?: {
+    address?: string;
+    type?: string;
+    rating?: number;
+    reviews?: number;
+  };
 }
 
 function MapUpdater({ position }: { position: [number, number] }) {
@@ -55,64 +80,16 @@ function MapUpdater({ position }: { position: [number, number] }) {
 
 function App() {
   const [position, setPosition] = useState<[number, number]>([40.4168, -3.7038]);
-  const [gyms, setGyms] = useState<Gym[]>([]);
-  const [loading, setLoading] = useState({ provinces: false, gyms: false });
-  const [provinces, setProvinces] = useState<Province[]>([]);
-  const [selectedProvince, setSelectedProvince] = useState<string>('28'); // Madrid
-  const [currentProvince, setCurrentProvince] = useState<Province | null>(null);
+  const [gyms, setGyms] = useState<Location[]>([]);
+  const [parks, setParks] = useState<NationalPark[]>([]);
+  const [loading, setLoading] = useState({ gyms: false, parks: false });
+  const [selectedProvince, setSelectedProvince] = useState<string>('28');
 
-  // 1. Obtener datos de provincias de datos.gob.es
-  useEffect(() => {
-    const fetchProvinces = async () => {
-      setLoading(prev => ({ ...prev, provinces: true }));
-      try {
-        // API de datos.gob.es para información territorial
-        const response = await fetch('https://datos.gob.es/apidata/catalog/dataset?q=provincias&sort=title');
-        const datasets = await response.json();
-        
-        // Buscar el dataset específico de provincias
-        const provinceDataset = datasets.result.items.find(
-          (item: any) => item.title.includes('Provincias')
-        );
-
-        if (provinceDataset) {
-          const dataResponse = await fetch(provinceDataset.link);
-          const provincesData = await dataResponse.json();
-          
-          // Mapear datos y añadir coordenadas aproximadas
-          const formattedProvinces = provincesData.map((prov: any) => ({
-            codigo: prov.codigo,
-            nombre: prov.nombre,
-            capital: prov.capital || 'Desconocida',
-            poblacion: prov.poblacion || 0,
-            superficie: prov.superficie || 0,
-            comunidad: prov.comunidad || 'Desconocida',
-            bounds: getProvinceBounds(prov.codigo)
-          }));
-
-          setProvinces(formattedProvinces);
-          setCurrentProvince(formattedProvinces.find((p: any) => p.codigo === selectedProvince) || null);
-        }
-      } catch (error) {
-        console.error("Error cargando provincias:", error);
-        // Usar datos de fallback si la API falla
-        setProvinces(fallbackProvinces);
-        setCurrentProvince(fallbackProvinces.find(p => p.codigo === selectedProvince) || null);
-      } finally {
-        setLoading(prev => ({ ...prev, provinces: false }));
-      }
-    };
-
-    fetchProvinces();
-  }, []);
-
-  // 2. Buscar gimnasios via Overpass API
   const searchGyms = async () => {
-    if (!currentProvince) return;
-    
     setLoading(prev => ({ ...prev, gyms: true }));
     try {
-      const [southWest, northEast] = currentProvince.bounds;
+      const bounds = getProvinceBounds(selectedProvince);
+      const [southWest, northEast] = bounds;
       const query = `
         [out:json];
         (
@@ -127,7 +104,6 @@ function App() {
       );
       
       const data = await response.json();
-      
       setGyms(data.elements.map((element: any) => ({
         id: element.id,
         lat: element.lat || element.center.lat,
@@ -141,80 +117,81 @@ function App() {
     }
   };
 
-  // 3. Actualizar provincia seleccionada
-  useEffect(() => {
-    if (provinces.length > 0) {
-      const province = provinces.find(p => p.codigo === selectedProvince);
-      if (province) {
-        setCurrentProvince(province);
-        const [[lat1, lon1], [lat2, lon2]] = province.bounds;
-        setPosition([(lat1 + lat2) / 2, (lon1 + lon2) / 2]);
-      }
+  const searchParks = async () => {
+    setLoading(prev => ({ ...prev, parks: true }));
+    try {
+      const bounds = getProvinceBounds(selectedProvince);
+      const [southWest, northEast] = bounds;
+      const query = `
+        [out:json];
+        (
+          node["leisure"="park"](${southWest[0]},${southWest[1]},${northEast[0]},${northEast[1]});
+          way["leisure"="park"](${southWest[0]},${southWest[1]},${northEast[0]},${northEast[1]});
+        );
+        out center;
+      `;
+      
+      const response = await fetch(
+        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
+      );
+      
+      const data = await response.json();
+      setParks(data.elements.map((element: any) => ({
+        id: element.id,
+        lat: element.lat || element.center.lat,
+        lon: element.lon || element.center.lon,
+        tags: element.tags || {}
+      })));
+    } catch (error) {
+      console.error("Error buscando parques:", error);
+    } finally {
+      setLoading(prev => ({ ...prev, parks: false }));
     }
-  }, [selectedProvince, provinces]);
+  };
 
   return (
     <div className="app-container">
-      <h1>Gimnasios en España</h1>
+      <h1>Gimnasios y Parques en España</h1>
       
-      <div className="info-panel">
-        {loading.provinces ? (
-          <p>Cargando datos de provincias...</p>
-        ) : currentProvince ? (
-          <div className="province-info">
-            <h2>{currentProvince.nombre}</h2>
-            <div className="province-details">
-              <p><strong>Capital:</strong> {currentProvince.capital}</p>
-              <p><strong>Población:</strong> {currentProvince.poblacion.toLocaleString()} hab.</p>
-              <p><strong>Superficie:</strong> {currentProvince.superficie} km²</p>
-              <p><strong>Comunidad:</strong> {currentProvince.comunidad}</p>
-            </div>
-          </div>
-        ) : (
-          <p>No se encontraron datos de la provincia</p>
-        )}
+      <div className="controls">
+        <select
+          value={selectedProvince}
+          onChange={(e) => setSelectedProvince(e.target.value)}
+        >
+          {fallbackProvinces.map(province => (
+            <option key={province.codigo} value={province.codigo}>
+              {province.nombre}
+            </option>
+          ))}
+        </select>
         
-        <div className="controls">
-          <div className="province-select">
-            <label htmlFor="province">Provincia:</label>
-            <select
-              id="province"
-              value={selectedProvince}
-              onChange={(e) => setSelectedProvince(e.target.value)}
-              disabled={loading.provinces}
-            >
-              {provinces.map(province => (
-                <option key={province.codigo} value={province.codigo}>
-                  {province.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <button 
-            onClick={searchGyms}
-            disabled={loading.gyms || !currentProvince}
-            className="search-button"
-          >
-            {loading.gyms ? 'Buscando...' : 'Buscar Gimnasios'}
-          </button>
-        </div>
+        <button 
+          onClick={searchGyms}
+          disabled={loading.gyms}
+        >
+          {loading.gyms ? 'Buscando...' : 'Buscar Gimnasios'}
+        </button>
+
+        <button 
+          onClick={searchParks}
+          disabled={loading.parks}
+        >
+          {loading.parks ? 'Buscando...' : 'Buscar Parques'}
+        </button>
       </div>
-      
+
       <div className="map-container">
         <MapContainer 
           center={position} 
           zoom={10} 
           style={{ height: '100%', width: '100%' }}
+          scrollWheelZoom={true}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          
-          <Marker position={position} icon={UserIcon}>
-            <Popup>Centro de {currentProvince?.nombre || 'España'}</Popup>
-          </Marker>
+          <MapUpdater position={position} />
           
           {gyms.map(gym => (
             <Marker 
@@ -223,22 +200,22 @@ function App() {
               icon={GymIcon}
             >
               <Popup>
-                <div className="gym-popup">
-                  <h3>{gym.tags.name || 'Gimnasio'}</h3>
-                  {gym.tags.website && (
-                    <p>
-                      <strong>Web:</strong>{' '}
-                      <a href={gym.tags.website} target="_blank" rel="noreferrer">
-                        {gym.tags.website}
-                      </a>
-                    </p>
-                  )}
-                </div>
+                <h3>{gym.tags.name || 'Gimnasio'}</h3>
               </Popup>
             </Marker>
           ))}
-          
-          <MapUpdater position={position} />
+
+          {parks.map(park => (
+            <Marker 
+              key={`park-${park.id}`}
+              position={[park.lat, park.lon]}
+              icon={ParkIcon}
+            >
+              <Popup>
+                <h3>{park.tags.name || 'Parque'}</h3>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
       </div>
     </div>
@@ -263,27 +240,5 @@ function getProvinceBounds(code: string): [[number, number], [number, number]] {
   };
   return bounds[code] || [[40.0, -4.0], [41.0, -3.0]]; // Default para provincias no mapeadas
 }
-
-// Datos de fallback (si la API no está disponible)
-const fallbackProvinces: Province[] = [
-  {
-    codigo: '28',
-    nombre: 'Madrid',
-    capital: 'Madrid',
-    poblacion: 6663394,
-    superficie: 8028,
-    comunidad: 'Comunidad de Madrid',
-    bounds: [[40.35, -3.9], [40.55, -3.6]]
-  },
-  {
-    codigo: '08',
-    nombre: 'Barcelona',
-    capital: 'Barcelona',
-    poblacion: 5620285,
-    superficie: 7723,
-    comunidad: 'Cataluña',
-    bounds: [[41.3, 2.0], [41.5, 2.3]]
-  },
-];
 
 export default App;
