@@ -55,19 +55,17 @@ interface Location {
   id: number;
   lat: number;
   lon: number;
-  tags: {
-    name: string;
-    description?: string;
-    website?: string;
-    opening_hours?: string;
-    phone?: string;
-  };
-  osmDetails?: {
-    address?: string;
-    type?: string;
-    rating?: number;
-    reviews?: number;
-  };
+  tags: LocationTags;
+}
+
+interface LocationTags {
+  name: string;
+  description?: string;
+  website?: string;
+  opening_hours?: string;
+  phone?: string;
+  sport?: string[];
+  facilities?: string[];
 }
 
 function MapUpdater({ position }: { position: [number, number] }) {
@@ -81,9 +79,14 @@ function MapUpdater({ position }: { position: [number, number] }) {
 function App() {
   const [position, setPosition] = useState<[number, number]>([40.4168, -3.7038]);
   const [gyms, setGyms] = useState<Location[]>([]);
-  const [parks, setParks] = useState<NationalPark[]>([]);
+  const [parks, setParks] = useState<Location[]>([]);
   const [loading, setLoading] = useState({ gyms: false, parks: false });
   const [selectedProvince, setSelectedProvince] = useState<string>('28');
+  const [selectedSport, setSelectedSport] = useState<string>('all');
+  const [selectedFacility, setSelectedFacility] = useState<string>('all');
+
+  const sports = ['all', 'fitness', 'yoga', 'swimming', 'tennis', 'basketball'];
+  const facilities = ['all', 'parking', 'shower', 'locker', 'wifi'];
 
   const searchGyms = async () => {
     setLoading(prev => ({ ...prev, gyms: true }));
@@ -149,25 +152,67 @@ function App() {
     }
   };
 
+  const filteredGyms = gyms.filter(gym => {
+    if (selectedSport === 'all') return true;
+    return gym.tags.sport?.includes(selectedSport);
+  });
+
+  const filteredParks = parks.filter(park => {
+    if (selectedFacility === 'all') return true;
+    return park.tags.facilities?.includes(selectedFacility);
+  });
+
   return (
     <div className="app-container">
       <h1>Gimnasios y Parques en España</h1>
       
       <div className="controls">
-        <select
-          value={selectedProvince}
-          onChange={(e) => setSelectedProvince(e.target.value)}
-        >
-          {fallbackProvinces.map(province => (
-            <option key={province.codigo} value={province.codigo}>
-              {province.nombre}
-            </option>
-          ))}
-        </select>
+        <div className="control-group">
+          <label>Provincia:</label>
+          <select
+            value={selectedProvince}
+            onChange={(e) => setSelectedProvince(e.target.value)}
+          >
+            {fallbackProvinces.map(province => (
+              <option key={province.codigo} value={province.codigo}>
+                {province.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="control-group">
+          <label>Deporte:</label>
+          <select
+            value={selectedSport}
+            onChange={(e) => setSelectedSport(e.target.value)}
+          >
+            {sports.map(sport => (
+              <option key={sport} value={sport}>
+                {sport.charAt(0).toUpperCase() + sport.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="control-group">
+          <label>Instalaciones:</label>
+          <select
+            value={selectedFacility}
+            onChange={(e) => setSelectedFacility(e.target.value)}
+          >
+            {facilities.map(facility => (
+              <option key={facility} value={facility}>
+                {facility.charAt(0).toUpperCase() + facility.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
         
         <button 
           onClick={searchGyms}
           disabled={loading.gyms}
+          className="search-button"
         >
           {loading.gyms ? 'Buscando...' : 'Buscar Gimnasios'}
         </button>
@@ -175,9 +220,15 @@ function App() {
         <button 
           onClick={searchParks}
           disabled={loading.parks}
+          className="search-button"
         >
           {loading.parks ? 'Buscando...' : 'Buscar Parques'}
         </button>
+      </div>
+
+      <div className="stats">
+        <p>Gimnasios encontrados: {filteredGyms.length}</p>
+        <p>Parques encontrados: {filteredParks.length}</p>
       </div>
 
       <div className="map-container">
@@ -193,19 +244,23 @@ function App() {
           />
           <MapUpdater position={position} />
           
-          {gyms.map(gym => (
+          {filteredGyms.map(gym => (
             <Marker 
               key={`gym-${gym.id}`}
               position={[gym.lat, gym.lon]}
               icon={GymIcon}
             >
               <Popup>
-                <h3>{gym.tags.name || 'Gimnasio'}</h3>
+                <div className="popup-content">
+                  <h3>{gym.tags.name || 'Gimnasio'}</h3>
+                  {gym.tags.description && <p>{gym.tags.description}</p>}
+                  {gym.tags.opening_hours && <p>Horario: {gym.tags.opening_hours}</p>}
+                </div>
               </Popup>
             </Marker>
           ))}
 
-          {parks.map(park => (
+          {filteredParks.map(park => (
             <Marker 
               key={`park-${park.id}`}
               position={[park.lat, park.lon]}
